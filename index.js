@@ -45,7 +45,7 @@ function loadConfig() {
   try {
     const configPath = path.join(__dirname, 'config.json');
     if (!fs.existsSync(configPath)) {
-      log(`未找到配置文件 ${configPath}，使用默认配置`, 'WARN');
+      log(LOG_MESSAGES.STARTUP.CONFIG_NOT_FOUND, 'WARN');
       // 如果配置文件不存在则创建默认配置
       const defaultConfig = {
         cognito: {
@@ -70,7 +70,7 @@ function loadConfig() {
     }
     
     const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    log('Configuration loaded successfully from config.json');
+    log(LOG_MESSAGES.STARTUP.CONFIG_LOAD, 'SUCCESS');
     
     // 加密保存配置
     const key = crypto.scryptSync(process.env.CONFIG_KEY || 'default-key', 'salt', 32);
@@ -79,7 +79,7 @@ function loadConfig() {
     
     return userConfig;
   } catch (error) {
-    log(`Error loading config: ${error.message}`, 'ERROR');
+    log(LOG_MESSAGES.STARTUP.CONFIG_ERROR, 'ERROR');
     throw error;
   }
 }
@@ -109,7 +109,7 @@ const config = {
 
 function validateConfig() {
   if (!config.cognito.username || !config.cognito.password) {
-    log('ERROR: Username and password must be set in config.json', 'ERROR');
+    log(LOG_MESSAGES.AUTH.LOGIN_FAILED, 'ERROR');
     console.log('\nPlease update your config.json file with your credentials:');
     console.log(JSON.stringify({
       cognito: {
@@ -135,6 +135,47 @@ function getFormattedDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 }
 
+// 优化日志输出的中文提示
+const LOG_MESSAGES = {
+  STARTUP: {
+    CONFIG_LOAD: '加载配置文件成功',
+    CONFIG_NOT_FOUND: '未找到配置文件，使用默认配置',
+    CONFIG_ERROR: '加载配置文件出错',
+    AUTH_SUCCESS: '✅ 认证成功，机器人启动中...',
+    AUTH_FAILED: '❌ 认证失败，请检查账号密码',
+    PROXY_LOAD: '已加载 %d 个代理地址',
+    PROXY_NONE: '未配置代理，使用直连模式'
+  },
+  VALIDATION: {
+    START: '开始新一轮验证...',
+    PRICES_FETCH: '✅ 成功获取 %d 个价格数据',
+    PRICES_ERROR: '❌ 获取价格数据失败',
+    PROCESS_START: '正在处理价格数据...',
+    PROCESS_SUCCESS: '✅ 验证成功: %s',
+    PROCESS_FAILED: '❌ 验证失败: %s',
+    NEXT_INTERVAL: '⏳ %d 秒后进行下一轮验证',
+    TOKEN_REFRESH: '🔄 Token 已刷新'
+  },
+  AUTH: {
+    LOGIN_START: '正在登录...',
+    LOGIN_SUCCESS: '✅ 登录成功',
+    LOGIN_FAILED: '❌ 登录失败: %s',
+    REGISTER_START: '开始注册新用户...',
+    REGISTER_SUCCESS: '✅ 注册成功，请查收验证邮件',
+    REGISTER_FAILED: '❌ 注册失败: %s',
+    VERIFY_START: '正在验证邮箱...',
+    VERIFY_SUCCESS: '✅ 邮箱验证成功',
+    VERIFY_FAILED: '❌ 邮箱验证失败: %s'
+  },
+  STATS: {
+    TITLE: '\n📊 验证统计报告',
+    TOTAL: '总处理数据: %d',
+    SUCCESS: '✅ 成功: %d',
+    FAILED: '❌ 失败: %d',
+    COMPLETE: '---------------完成---------------\n'
+  }
+};
+
 // 优化日志输出格式
 function getLogPrefix(type = 'INFO') {
   const colors = {
@@ -144,8 +185,15 @@ function getLogPrefix(type = 'INFO') {
     'SUCCESS': '\x1b[32m', // 绿色
     'SYSTEM': '\x1b[35m'   // 紫色
   };
+  const icons = {
+    'INFO': 'ℹ️',
+    'WARN': '⚠️',
+    'ERROR': '❌',
+    'SUCCESS': '✅',
+    'SYSTEM': '🔧'
+  };
   const reset = '\x1b[0m';
-  return `${colors[type]}[${getFormattedDate()}] [${type}]${reset}`;
+  return `${colors[type]}[${getFormattedDate()}] ${icons[type]} ${reset}`;
 }
 
 function log(message, type = 'INFO') {
@@ -155,7 +203,7 @@ function log(message, type = 'INFO') {
 function loadProxies() {
   try {
     if (!fs.existsSync(config.threads.proxyFile)) {
-      log(`Proxy file not found at ${config.threads.proxyFile}, creating empty file`, 'WARN');
+      log(LOG_MESSAGES.PROXY_NONE, 'WARN');
       fs.writeFileSync(config.threads.proxyFile, '', 'utf8');
       return [];
     }
@@ -164,10 +212,10 @@ function loadProxies() {
       .split('\n')
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('#'));
-    log(`Loaded ${proxies.length} proxies from ${config.threads.proxyFile}`);
+    log(LOG_MESSAGES.PROXY_LOAD.replace('%d', proxies.length), 'SUCCESS');
     return proxies;
   } catch (error) {
-    log(`Error loading proxies: ${error.message}`, 'ERROR');
+    log(LOG_MESSAGES.PROXY_ERROR, 'ERROR');
     return [];
   }
 }
@@ -219,7 +267,7 @@ class CognitoAuth {
    */
   static async signUp(email, password, referralCode = '') {
     try {
-      log('开始注册新用户...');
+      log(LOG_MESSAGES.AUTH.REGISTER_START);
       
       // 验证邮箱格式
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -251,16 +299,16 @@ class CognitoAuth {
 
         userPool.signUp(email, password, attributeList, null, (err, result) => {
           if (err) {
-            log(`注册失败: ${err.message}`, 'ERROR');
+            log(LOG_MESSAGES.AUTH.REGISTER_FAILED, err.message);
             reject(err);
             return;
           }
-          log('注册成功，请查收验证邮件', 'SUCCESS');
+          log(LOG_MESSAGES.AUTH.REGISTER_SUCCESS);
           resolve(result);
         });
       });
     } catch (error) {
-      log(`注册失败: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.AUTH.REGISTER_FAILED, error.message);
       throw error;
     }
   }
@@ -273,7 +321,7 @@ class CognitoAuth {
    */
   static async verifyEmail(email, code) {
     try {
-      log('正在验证邮箱...');
+      log(LOG_MESSAGES.AUTH.VERIFY_START);
       
       return new Promise((resolve, reject) => {
         const userData = {
@@ -285,16 +333,16 @@ class CognitoAuth {
 
         cognitoUser.confirmRegistration(code, true, (err, result) => {
           if (err) {
-            log(`邮箱验证失败: ${err.message}`, 'ERROR');
+            log(LOG_MESSAGES.AUTH.VERIFY_FAILED, err.message);
             reject(err);
             return;
           }
-          log('邮箱验证成功！', 'SUCCESS');
+          log(LOG_MESSAGES.AUTH.VERIFY_SUCCESS);
           resolve(result);
         });
       });
     } catch (error) {
-      log(`邮箱验证失败: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.AUTH.VERIFY_FAILED, error.message);
       throw error;
     }
   }
@@ -323,7 +371,7 @@ class TokenManager {
       let result = this.refreshToken ? await this.auth.refreshSession(this.refreshToken) : await this.auth.authenticate();
       await this.updateTokens(result);
     } catch (error) {
-      log(`Token refresh/auth error: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.AUTH.LOGIN_FAILED, error.message);
       throw error;
     }
   }
@@ -335,7 +383,7 @@ class TokenManager {
     this.expiresAt = Date.now() + result.expiresIn;
     const tokens = { accessToken: this.accessToken, idToken: this.idToken, refreshToken: this.refreshToken, isAuthenticated: true, isVerifying: false };
     await saveTokens(tokens);
-    log('Tokens updated and saved to tokens.json');
+    log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
   }
 }
 
@@ -348,7 +396,7 @@ async function getTokens() {
     log(`Successfully read access token: ${tokens.accessToken.substring(0, 10)}...`);
     return tokens;
   } catch (error) {
-    log(`Error reading tokens: ${error.message}`, 'ERROR');
+    log(LOG_MESSAGES.VALIDATION.PRICES_ERROR, 'ERROR');
     throw error;
   }
 }
@@ -356,10 +404,10 @@ async function getTokens() {
 async function saveTokens(tokens) {
   try {
     await fs.promises.writeFile(config.stork.tokenPath, JSON.stringify(tokens, null, 2), 'utf8');
-    log('Tokens saved successfully');
+    log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
     return true;
   } catch (error) {
-    log(`Error saving tokens: ${error.message}`, 'ERROR');
+    log(LOG_MESSAGES.VALIDATION.PRICES_ERROR, 'ERROR');
     return false;
   }
 }
@@ -373,7 +421,7 @@ function getProxyAgent(proxy) {
 
 async function refreshTokens(refreshToken) {
   try {
-    log('Refreshing access token via Stork API...');
+    log(LOG_MESSAGES.AUTH.LOGIN_START);
     const response = await axios({
       method: 'POST',
       url: `${config.stork.authURL}/refresh`,
@@ -392,10 +440,10 @@ async function refreshTokens(refreshToken) {
       isVerifying: false
     };
     await saveTokens(tokens);
-    log('Token refreshed successfully via Stork API');
+    log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
     return tokens;
   } catch (error) {
-    log(`Token refresh failed: ${error.message}`, 'ERROR');
+    log(LOG_MESSAGES.AUTH.LOGIN_FAILED, error.message);
     throw error;
   }
 }
@@ -428,12 +476,12 @@ async function getSignedPrices(tokens) {
           ...assetData
         };
       });
-      log(`Successfully retrieved ${result.length} signed prices`);
+      log(LOG_MESSAGES.VALIDATION.PRICES_FETCH.replace('%d', result.length), 'SUCCESS');
       return result;
     } catch (error) {
       retries++;
       if (retries === maxRetries) throw error;
-      log(`Retry ${retries}/${maxRetries} after error: ${error.message}`, 'WARN');
+      log(LOG_MESSAGES.VALIDATION.PRICES_ERROR, error.message);
       await new Promise(resolve => setTimeout(resolve, 2000 * retries));
     }
   }
@@ -467,7 +515,7 @@ function getRandomInterval(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 优化验证统计显示
+// 修改验证统计显示
 function displayStats(userData) {
   if (!userData || !userData.stats) {
     log('暂无有效的统计数据', 'WARN');
@@ -476,7 +524,7 @@ function displayStats(userData) {
 
   console.clear();
   console.log('\x1b[36m=============================================\x1b[0m');
-  console.log('\x1b[32m   STORK ORACLE 自动验证机器人 - 0xbaiwan\x1b[0m');
+  console.log('\x1b[32m     STORK ORACLE 自动验证机器人 - 0xbaiwan\x1b[0m');
   console.log('\x1b[36m=============================================\x1b[0m');
   console.log(`🕒 当前时间: ${getTimestamp()}`);
   console.log('\x1b[36m---------------------------------------------\x1b[0m');
@@ -485,38 +533,78 @@ function displayStats(userData) {
   console.log(`🎫 邀请码: ${userData.referral_code || '未知'}`);
   console.log('\x1b[36m---------------------------------------------\x1b[0m');
   console.log('📊 验证统计:');
-  console.log(`✅ 有效验证次数: ${userData.stats.stork_signed_prices_valid_count || 0}`);
-  console.log(`❌ 无效验证次数: ${userData.stats.stork_signed_prices_invalid_count || 0}`);
-  console.log(`⏱️ 最后验证时间: ${userData.stats.stork_signed_prices_last_verified_at || '从未验证'}`);
-  console.log(`👥 邀请使用次数: ${userData.stats.referral_usage_count || 0}`);
+  console.log(`✅ 有效验证: ${userData.stats.stork_signed_prices_valid_count || 0} 次`);
+  console.log(`❌ 无效验证: ${userData.stats.stork_signed_prices_invalid_count || 0} 次`);
+  console.log(`⏱️ 最后验证: ${userData.stats.stork_signed_prices_last_verified_at || '从未验证'}`);
+  console.log(`👥 邀请使用: ${userData.stats.referral_usage_count || 0} 次`);
   console.log('\x1b[36m---------------------------------------------\x1b[0m');
   console.log(`⏳ 验证间隔: ${config.stork.intervalRange.min}-${config.stork.intervalRange.max} 秒随机`);
   console.log('\x1b[36m=============================================\x1b[0m');
 }
 
-// 优化验证过程日志
-async function sendValidation(tokens, msgHash, isValid, proxy) {
-  await rateLimit.checkLimit();
-  
+// 修改验证过程日志
+async function runValidationProcess(tokenManager) {
   try {
-    const agent = getProxyAgent(proxy);
-    const response = await axios({
-      method: 'POST',
-      url: `${config.stork.baseURL}/stork_signed_prices/validations`,
-      headers: {
-        'Authorization': `Bearer ${tokens.accessToken}`,
-        'Content-Type': 'application/json',
-        'Origin': config.stork.origin,
-        'User-Agent': config.stork.userAgent
-      },
-      httpsAgent: agent,
-      data: { msg_hash: msgHash, valid: isValid }
-    });
-    log(`✅ 验证成功: ${msgHash.substring(0, 10)}... ${proxy ? `(代理: ${proxy})` : '(直连)'}`, 'SUCCESS');
-    return response.data;
+    log(LOG_MESSAGES.VALIDATION.START);
+    const prices = await getSignedPrices(await tokenManager.getValidToken());
+    log(LOG_MESSAGES.VALIDATION.PRICES_FETCH.replace('%d', prices.length), 'SUCCESS');
+    
+    const proxies = loadProxies();
+
+    if (!prices || prices.length === 0) {
+      log('No data to validate');
+      const userData = await getUserStats(await tokenManager.getValidToken());
+      displayStats(userData);
+      return;
+    }
+
+    log(LOG_MESSAGES.VALIDATION.PROCESS_START);
+    const workers = [];
+
+    const chunkSize = Math.ceil(prices.length / config.threads.maxWorkers);
+    const batches = [];
+    for (let i = 0; i < prices.length; i += chunkSize) {
+      batches.push(prices.slice(i, i + chunkSize));
+    }
+
+    for (let i = 0; i < Math.min(batches.length, config.threads.maxWorkers); i++) {
+      const batch = batches[i];
+      const proxy = proxies.length > 0 ? proxies[i % proxies.length] : null;
+
+      batch.forEach(priceData => {
+        workers.push(new Promise((resolve) => {
+          const worker = new Worker(__filename, {
+            workerData: { priceData, tokens: await tokenManager.getValidToken(), proxy }
+          });
+          worker.on('message', resolve);
+          worker.on('error', (error) => resolve({ success: false, error: error.message }));
+          worker.on('exit', () => resolve({ success: false, error: 'Worker exited' }));
+        }));
+      });
+    }
+
+    const results = await Promise.all(workers);
+    const successCount = results.filter(r => r.success).length;
+    log(LOG_MESSAGES.VALIDATION.PROCESS_SUCCESS.replace('%s', successCount + '/' + prices.length), 'SUCCESS');
+
+    const updatedUserData = await getUserStats(await tokenManager.getValidToken());
+    const newValidCount = updatedUserData.stats.stork_signed_prices_valid_count || 0;
+    const newInvalidCount = updatedUserData.stats.stork_signed_prices_invalid_count || 0;
+
+    const actualValidIncrease = newValidCount - previousStats.validCount;
+    const actualInvalidIncrease = newInvalidCount - previousStats.invalidCount;
+
+    previousStats.validCount = newValidCount;
+    previousStats.invalidCount = newInvalidCount;
+
+    displayStats(updatedUserData);
+    log(LOG_MESSAGES.STATS.TITLE, 'SYSTEM');
+    log(LOG_MESSAGES.STATS.TOTAL.replace('%d', actualValidIncrease + actualInvalidIncrease));
+    log(LOG_MESSAGES.STATS.SUCCESS.replace('%d', actualValidIncrease), 'SUCCESS');
+    log(LOG_MESSAGES.STATS.FAILED.replace('%d', actualInvalidIncrease), 'ERROR');
+    log(LOG_MESSAGES.STATS.COMPLETE);
   } catch (error) {
-    log(`❌ 验证失败: ${msgHash.substring(0, 10)}... 错误: ${error.message}`, 'ERROR');
-    throw error;
+    log(LOG_MESSAGES.VALIDATION.PROCESS_FAILED.replace('%s', error.message), 'ERROR');
   }
 }
 
@@ -535,7 +623,7 @@ async function getUserStats(tokens) {
     });
     return response.data.data;
   } catch (error) {
-    log(`Error getting user stats: ${error.message}`, 'ERROR');
+    log('Error getting user stats', 'ERROR');
     throw error;
   }
 }
@@ -598,90 +686,12 @@ if (!isMainThread) {
 } else {
   let previousStats = { validCount: 0, invalidCount: 0 };
 
-  async function runValidationProcess(tokenManager) {
-    try {
-      log('--------- STARTING VALIDATION PROCESS ---------');
-      const tokens = await getTokens();
-      const initialUserData = await getUserStats(tokens);
-
-      if (!initialUserData || !initialUserData.stats) {
-        throw new Error('Could not fetch initial user stats');
-      }
-
-      const initialValidCount = initialUserData.stats.stork_signed_prices_valid_count || 0;
-      const initialInvalidCount = initialUserData.stats.stork_signed_prices_invalid_count || 0;
-
-      if (previousStats.validCount === 0 && previousStats.invalidCount === 0) {
-        previousStats.validCount = initialValidCount;
-        previousStats.invalidCount = initialInvalidCount;
-      }
-
-      const signedPrices = await getSignedPrices(tokens);
-      const proxies = loadProxies();
-
-      if (!signedPrices || signedPrices.length === 0) {
-        log('No data to validate');
-        const userData = await getUserStats(tokens);
-        displayStats(userData);
-        return;
-      }
-
-      log(`Processing ${signedPrices.length} data points with ${config.threads.maxWorkers} workers...`);
-      const workers = [];
-
-      const chunkSize = Math.ceil(signedPrices.length / config.threads.maxWorkers);
-      const batches = [];
-      for (let i = 0; i < signedPrices.length; i += chunkSize) {
-        batches.push(signedPrices.slice(i, i + chunkSize));
-      }
-
-      for (let i = 0; i < Math.min(batches.length, config.threads.maxWorkers); i++) {
-        const batch = batches[i];
-        const proxy = proxies.length > 0 ? proxies[i % proxies.length] : null;
-
-        batch.forEach(priceData => {
-          workers.push(new Promise((resolve) => {
-            const worker = new Worker(__filename, {
-              workerData: { priceData, tokens, proxy }
-            });
-            worker.on('message', resolve);
-            worker.on('error', (error) => resolve({ success: false, error: error.message }));
-            worker.on('exit', () => resolve({ success: false, error: 'Worker exited' }));
-          }));
-        });
-      }
-
-      const results = await Promise.all(workers);
-      const successCount = results.filter(r => r.success).length;
-      log(`Processed ${successCount}/${results.length} validations successfully`);
-
-      const updatedUserData = await getUserStats(tokens);
-      const newValidCount = updatedUserData.stats.stork_signed_prices_valid_count || 0;
-      const newInvalidCount = updatedUserData.stats.stork_signed_prices_invalid_count || 0;
-
-      const actualValidIncrease = newValidCount - previousStats.validCount;
-      const actualInvalidIncrease = newInvalidCount - previousStats.invalidCount;
-
-      previousStats.validCount = newValidCount;
-      previousStats.invalidCount = newInvalidCount;
-
-      displayStats(updatedUserData);
-      log(`--------- VALIDATION SUMMARY ---------`);
-      log(`Total data processed: ${actualValidIncrease + actualInvalidIncrease}`);
-      log(`Successful: ${actualValidIncrease}`);
-      log(`Failed: ${actualInvalidIncrease}`);
-      log('--------- COMPLETE ---------');
-    } catch (error) {
-      log(`Validation process stopped: ${error.message}`, 'ERROR');
-    }
-  }
-
   async function main() {
     try {
       // 重新加载最新配置
       const currentConfig = loadConfig();
       if (!currentConfig.cognito.username || !currentConfig.cognito.password) {
-        log('请先登录或注册账号', 'ERROR');
+        log(LOG_MESSAGES.AUTH.LOGIN_FAILED, 'ERROR');
         process.exit(1);
       }
       
@@ -691,7 +701,7 @@ if (!isMainThread) {
       
       const tokenManager = new TokenManager();
       await tokenManager.getValidToken();
-      log('初始认证成功', 'SUCCESS');
+      log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
 
       // 修改为使用随机间隔
       const runWithRandomInterval = async () => {
@@ -700,7 +710,7 @@ if (!isMainThread) {
           config.stork.intervalRange.min, 
           config.stork.intervalRange.max
         );
-        log(`下次验证将在 ${nextInterval} 秒后进行`, 'INFO');
+        log(LOG_MESSAGES.VALIDATION.NEXT_INTERVAL.replace('%d', nextInterval), 'INFO');
         setTimeout(runWithRandomInterval, nextInterval * 1000);
       };
 
@@ -709,10 +719,10 @@ if (!isMainThread) {
       // Token 刷新保持不变
       setInterval(async () => {
         await tokenManager.getValidToken();
-        log('Token 已刷新', 'SUCCESS');
+        log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
       }, 50 * 60 * 1000);
     } catch (error) {
-      log(`程序启动失败: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.AUTH.LOGIN_FAILED, error.message);
       process.exit(1);
     }
   }
@@ -747,9 +757,9 @@ if (!isMainThread) {
 
       // 保存配置
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-      log('配置文件已更新');
+      log(LOG_MESSAGES.STARTUP.CONFIG_LOAD, 'SUCCESS');
     } catch (error) {
-      log(`更新配置文件失败: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.STARTUP.CONFIG_ERROR, 'ERROR');
       throw error;
     }
   }
@@ -797,7 +807,7 @@ if (!isMainThread) {
           // 自动更新配置文件
           await updateConfig(email, password);
           
-          log('注册完成！配置文件已自动更新');
+          log(LOG_MESSAGES.AUTH.REGISTER_SUCCESS);
           
           // 询问是否立即启动机器人
           const startNow = await question('是否立即启动机器人？(y/n): ');
@@ -819,11 +829,11 @@ if (!isMainThread) {
             // 先验证登录凭据
             const auth = new CognitoAuth(loginEmail, loginPassword);
             await auth.authenticate();
-            log('登录验证成功！', 'SUCCESS');
+            log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
             
             // 更新配置文件
             await updateConfig(loginEmail, loginPassword);
-            log('配置文件已更新', 'SUCCESS');
+            log(LOG_MESSAGES.STARTUP.CONFIG_LOAD, 'SUCCESS');
             
             // 重新加载配置
             config.cognito.username = loginEmail;
@@ -836,14 +846,14 @@ if (!isMainThread) {
               // 使用新的认证信息创建 tokenManager
               const tokenManager = new TokenManager();
               await tokenManager.getValidToken(); // 验证新的认证信息
-              log('认证信息验证成功，正在启动机器人...', 'SUCCESS');
+              log(LOG_MESSAGES.AUTH.LOGIN_SUCCESS);
               main();
             } else {
               readline.close();
               process.exit(0);
             }
           } catch (error) {
-            log(`登录失败: ${error.message}`, 'ERROR');
+            log(LOG_MESSAGES.AUTH.LOGIN_FAILED, error.message);
             readline.close();
             process.exit(1);
           }
@@ -853,7 +863,7 @@ if (!isMainThread) {
           // 检查配置文件是否已设置
           const currentConfig = loadConfig();
           if (!currentConfig.cognito.username || !currentConfig.cognito.password) {
-            log('请先登录或注册账号', 'ERROR');
+            log(LOG_MESSAGES.AUTH.LOGIN_FAILED, 'ERROR');
             readline.close();
             process.exit(1);
           }
@@ -875,7 +885,7 @@ if (!isMainThread) {
           process.exit(1);
       }
     } catch (error) {
-      log(`操作失败: ${error.message}`, 'ERROR');
+      log(LOG_MESSAGES.AUTH.LOGIN_FAILED, error.message);
       readline.close();
       process.exit(1);
     }
