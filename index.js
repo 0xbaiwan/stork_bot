@@ -9,6 +9,71 @@ const crypto = require('crypto');
 
 global.navigator = { userAgent: 'node' };
 
+// 优化日志输出的中文提示 - 移到文件开头
+const LOG_MESSAGES = {
+  STARTUP: {
+    CONFIG_LOAD: '加载配置文件成功',
+    CONFIG_NOT_FOUND: '未找到配置文件，使用默认配置',
+    CONFIG_ERROR: '加载配置文件出错',
+    AUTH_SUCCESS: '✅ 认证成功，机器人启动中...',
+    AUTH_FAILED: '❌ 认证失败，请检查账号密码',
+    PROXY_LOAD: '已加载 %d 个代理地址',
+    PROXY_NONE: '未配置代理，使用直连模式'
+  },
+  VALIDATION: {
+    START: '开始新一轮验证...',
+    PRICES_FETCH: '✅ 成功获取 %d 个价格数据',
+    PRICES_ERROR: '❌ 获取价格数据失败',
+    PROCESS_START: '正在处理价格数据...',
+    PROCESS_SUCCESS: '✅ 验证成功: %s',
+    PROCESS_FAILED: '❌ 验证失败: %s',
+    NEXT_INTERVAL: '⏳ %d 秒后进行下一轮验证',
+    TOKEN_REFRESH: '🔄 Token 已刷新'
+  },
+  AUTH: {
+    LOGIN_START: '正在登录...',
+    LOGIN_SUCCESS: '✅ 登录成功',
+    LOGIN_FAILED: '❌ 登录失败: %s',
+    REGISTER_START: '开始注册新用户...',
+    REGISTER_SUCCESS: '✅ 注册成功，请查收验证邮件',
+    REGISTER_FAILED: '❌ 注册失败: %s',
+    VERIFY_START: '正在验证邮箱...',
+    VERIFY_SUCCESS: '✅ 邮箱验证成功',
+    VERIFY_FAILED: '❌ 邮箱验证失败: %s'
+  },
+  STATS: {
+    TITLE: '\n📊 验证统计报告',
+    TOTAL: '总处理数据: %d',
+    SUCCESS: '✅ 成功: %d',
+    FAILED: '❌ 失败: %d',
+    COMPLETE: '---------------完成---------------\n'
+  }
+};
+
+// 优化日志输出格式
+function getLogPrefix(type = 'INFO') {
+  const colors = {
+    'INFO': '\x1b[36m',    // 青色
+    'WARN': '\x1b[33m',    // 黄色
+    'ERROR': '\x1b[31m',   // 红色
+    'SUCCESS': '\x1b[32m', // 绿色
+    'SYSTEM': '\x1b[35m'   // 紫色
+  };
+  const icons = {
+    'INFO': 'ℹ️',
+    'WARN': '⚠️',
+    'ERROR': '❌',
+    'SUCCESS': '✅',
+    'SYSTEM': '🔧'
+  };
+  const reset = '\x1b[0m';
+  return `${colors[type]}[${getFormattedDate()}] ${icons[type]} ${reset}`;
+}
+
+function log(message, type = 'INFO') {
+  console.log(`${getLogPrefix(type)} ${message}`);
+}
+
 /**
  * 配置加密函数
  * @param {Object} data - 需要加密的配置数据
@@ -133,71 +198,6 @@ function getTimestamp() {
 function getFormattedDate() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-}
-
-// 优化日志输出的中文提示
-const LOG_MESSAGES = {
-  STARTUP: {
-    CONFIG_LOAD: '加载配置文件成功',
-    CONFIG_NOT_FOUND: '未找到配置文件，使用默认配置',
-    CONFIG_ERROR: '加载配置文件出错',
-    AUTH_SUCCESS: '✅ 认证成功，机器人启动中...',
-    AUTH_FAILED: '❌ 认证失败，请检查账号密码',
-    PROXY_LOAD: '已加载 %d 个代理地址',
-    PROXY_NONE: '未配置代理，使用直连模式'
-  },
-  VALIDATION: {
-    START: '开始新一轮验证...',
-    PRICES_FETCH: '✅ 成功获取 %d 个价格数据',
-    PRICES_ERROR: '❌ 获取价格数据失败',
-    PROCESS_START: '正在处理价格数据...',
-    PROCESS_SUCCESS: '✅ 验证成功: %s',
-    PROCESS_FAILED: '❌ 验证失败: %s',
-    NEXT_INTERVAL: '⏳ %d 秒后进行下一轮验证',
-    TOKEN_REFRESH: '🔄 Token 已刷新'
-  },
-  AUTH: {
-    LOGIN_START: '正在登录...',
-    LOGIN_SUCCESS: '✅ 登录成功',
-    LOGIN_FAILED: '❌ 登录失败: %s',
-    REGISTER_START: '开始注册新用户...',
-    REGISTER_SUCCESS: '✅ 注册成功，请查收验证邮件',
-    REGISTER_FAILED: '❌ 注册失败: %s',
-    VERIFY_START: '正在验证邮箱...',
-    VERIFY_SUCCESS: '✅ 邮箱验证成功',
-    VERIFY_FAILED: '❌ 邮箱验证失败: %s'
-  },
-  STATS: {
-    TITLE: '\n📊 验证统计报告',
-    TOTAL: '总处理数据: %d',
-    SUCCESS: '✅ 成功: %d',
-    FAILED: '❌ 失败: %d',
-    COMPLETE: '---------------完成---------------\n'
-  }
-};
-
-// 优化日志输出格式
-function getLogPrefix(type = 'INFO') {
-  const colors = {
-    'INFO': '\x1b[36m',    // 青色
-    'WARN': '\x1b[33m',    // 黄色
-    'ERROR': '\x1b[31m',   // 红色
-    'SUCCESS': '\x1b[32m', // 绿色
-    'SYSTEM': '\x1b[35m'   // 紫色
-  };
-  const icons = {
-    'INFO': 'ℹ️',
-    'WARN': '⚠️',
-    'ERROR': '❌',
-    'SUCCESS': '✅',
-    'SYSTEM': '🔧'
-  };
-  const reset = '\x1b[0m';
-  return `${colors[type]}[${getFormattedDate()}] ${icons[type]} ${reset}`;
-}
-
-function log(message, type = 'INFO') {
-  console.log(`${getLogPrefix(type)} ${message}`);
 }
 
 function loadProxies() {
@@ -542,52 +542,56 @@ function displayStats(userData) {
   console.log('\x1b[36m=============================================\x1b[0m');
 }
 
-// 修改验证过程日志
+// 修改 worker 线程处理部分
+async function processWithWorkers(prices, tokenManager, proxies) {
+  const workers = [];
+  const proxyCount = proxies.length;
+  let proxyIndex = 0;
+
+  try {
+    // 先获取 token，避免在 Promise 中使用 await
+    const tokens = await tokenManager.getValidToken();
+
+    for (const priceData of prices) {
+      const proxy = proxyCount > 0 ? proxies[proxyIndex++ % proxyCount] : null;
+      
+      workers.push(new Promise((resolve) => {
+        const worker = new Worker(__filename, {
+          workerData: { priceData, tokens, proxy }  // 使用已获取的 tokens
+        });
+        
+        worker.on('message', resolve);
+        worker.on('error', (error) => resolve({ success: false, error: error.message }));
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            resolve({ success: false, error: `Worker stopped with exit code ${code}` });
+          }
+        });
+      }));
+    }
+
+    return await Promise.all(workers);
+  } catch (error) {
+    log(`Worker 处理错误: ${error.message}`, 'ERROR');
+    throw error;
+  }
+}
+
+// 修改验证过程
 async function runValidationProcess(tokenManager) {
   try {
     log(LOG_MESSAGES.VALIDATION.START);
-    const prices = await getSignedPrices(await tokenManager.getValidToken());
+    const tokens = await tokenManager.getValidToken();
+    const prices = await getSignedPrices(tokens);
     log(LOG_MESSAGES.VALIDATION.PRICES_FETCH.replace('%d', prices.length), 'SUCCESS');
-    
+
     const proxies = loadProxies();
+    const results = await processWithWorkers(prices, tokenManager, proxies);
 
-    if (!prices || prices.length === 0) {
-      log('No data to validate');
-      const userData = await getUserStats(await tokenManager.getValidToken());
-      displayStats(userData);
-      return;
-    }
-
-    log(LOG_MESSAGES.VALIDATION.PROCESS_START);
-    const workers = [];
-
-    const chunkSize = Math.ceil(prices.length / config.threads.maxWorkers);
-    const batches = [];
-    for (let i = 0; i < prices.length; i += chunkSize) {
-      batches.push(prices.slice(i, i + chunkSize));
-    }
-
-    for (let i = 0; i < Math.min(batches.length, config.threads.maxWorkers); i++) {
-      const batch = batches[i];
-      const proxy = proxies.length > 0 ? proxies[i % proxies.length] : null;
-
-      batch.forEach(priceData => {
-        workers.push(new Promise((resolve) => {
-          const worker = new Worker(__filename, {
-            workerData: { priceData, tokens: await tokenManager.getValidToken(), proxy }
-          });
-          worker.on('message', resolve);
-          worker.on('error', (error) => resolve({ success: false, error: error.message }));
-          worker.on('exit', () => resolve({ success: false, error: 'Worker exited' }));
-        }));
-      });
-    }
-
-    const results = await Promise.all(workers);
     const successCount = results.filter(r => r.success).length;
     log(LOG_MESSAGES.VALIDATION.PROCESS_SUCCESS.replace('%s', successCount + '/' + prices.length), 'SUCCESS');
 
-    const updatedUserData = await getUserStats(await tokenManager.getValidToken());
+    const updatedUserData = await getUserStats(tokens);
     const newValidCount = updatedUserData.stats.stork_signed_prices_valid_count || 0;
     const newInvalidCount = updatedUserData.stats.stork_signed_prices_invalid_count || 0;
 
@@ -604,7 +608,7 @@ async function runValidationProcess(tokenManager) {
     log(LOG_MESSAGES.STATS.FAILED.replace('%d', actualInvalidIncrease), 'ERROR');
     log(LOG_MESSAGES.STATS.COMPLETE);
   } catch (error) {
-    log(LOG_MESSAGES.VALIDATION.PROCESS_FAILED.replace('%s', error.message), 'ERROR');
+    log(`验证过程异常: ${error.message}`, 'ERROR');
   }
 }
 
