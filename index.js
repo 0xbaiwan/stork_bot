@@ -230,24 +230,35 @@ class CognitoAuth {
 
       const response = await axios({
         method: 'POST',
-        url: `${config.stork.authURL}/signup`,
+        url: 'https://api.jp.stork-oracle.network/auth/signup',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'User-Agent': config.stork.userAgent,
-          'Origin': config.stork.origin
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
+          'Sec-Fetch-Site': 'cross-site',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Dest': 'empty',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         data: {
-          email,
-          password,
-          referral_code: referralCode
+          email: email,
+          password: password,
+          referral_code: referralCode || undefined
         }
       });
 
-      log('注册成功，请查收验证邮件');
+      log('注册成功，请查收验证邮件', 'SUCCESS');
       return response.data;
     } catch (error) {
-      log(`注册失败: ${error.message}`, 'ERROR');
-      throw error;
+      if (error.response) {
+        const errorMessage = error.response.data?.message || error.response.data?.error || error.message;
+        log(`注册失败: ${errorMessage}`, 'ERROR');
+        throw new Error(errorMessage);
+      } else {
+        log(`注册失败: ${error.message}`, 'ERROR');
+        throw error;
+      }
     }
   }
 
@@ -259,27 +270,38 @@ class CognitoAuth {
    */
   static async verifyEmail(email, code) {
     try {
-      log('验证邮箱...');
+      log('正在验证邮箱...');
       
       const response = await axios({
         method: 'POST',
-        url: `${config.stork.authURL}/verify-email`,
+        url: 'https://api.jp.stork-oracle.network/auth/verify-email',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'User-Agent': config.stork.userAgent,
-          'Origin': config.stork.origin
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
+          'Sec-Fetch-Site': 'cross-site',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Dest': 'empty',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         data: {
-          email,
-          code
+          email: email,
+          code: code
         }
       });
 
-      log('邮箱验证成功');
+      log('邮箱验证成功！', 'SUCCESS');
       return response.data;
     } catch (error) {
-      log(`邮箱验证失败: ${error.message}`, 'ERROR');
-      throw error;
+      if (error.response) {
+        const errorMessage = error.response.data?.message || error.response.data?.error || error.message;
+        log(`邮箱验证失败: ${errorMessage}`, 'ERROR');
+        throw new Error(errorMessage);
+      } else {
+        log(`邮箱验证失败: ${error.message}`, 'ERROR');
+        throw error;
+      }
     }
   }
 }
@@ -656,24 +678,30 @@ if (!isMainThread) {
   }
 
   async function main() {
-    if (!validateConfig()) {
-      process.exit(1);
-    }
-    
-    const tokenManager = new TokenManager();
-
     try {
+      // 重新加载最新配置
+      const currentConfig = loadConfig();
+      if (!currentConfig.cognito.username || !currentConfig.cognito.password) {
+        log('请先登录或注册账号', 'ERROR');
+        process.exit(1);
+      }
+      
+      // 更新全局配置
+      config.cognito.username = currentConfig.cognito.username;
+      config.cognito.password = currentConfig.cognito.password;
+      
+      const tokenManager = new TokenManager();
       await tokenManager.getValidToken();
-      log('Initial authentication successful');
+      log('初始认证成功', 'SUCCESS');
 
       runValidationProcess(tokenManager);
       setInterval(() => runValidationProcess(tokenManager), config.stork.intervalSeconds * 1000);
       setInterval(async () => {
         await tokenManager.getValidToken();
-        log('Token refreshed via Cognito');
+        log('Token 已刷新', 'SUCCESS');
       }, 50 * 60 * 1000);
     } catch (error) {
-      log(`Application failed to start: ${error.message}`, 'ERROR');
+      log(`程序启动失败: ${error.message}`, 'ERROR');
       process.exit(1);
     }
   }
@@ -773,23 +801,31 @@ if (!isMainThread) {
 
         case '2':
           // 登录流程
-          const loginEmail = await question('请输入邮箱: ');
-          const loginPassword = await question('请输入密码: ');
-          
           try {
-            // 验证登录凭据
+            const loginEmail = await question('请输入邮箱: ');
+            const loginPassword = await question('请输入密码: ');
+            
+            // 先验证登录凭据
             const auth = new CognitoAuth(loginEmail, loginPassword);
             await auth.authenticate();
-            log('登录成功！');
+            log('登录验证成功！', 'SUCCESS');
             
             // 更新配置文件
             await updateConfig(loginEmail, loginPassword);
-            log('配置文件已更新');
+            log('配置文件已更新', 'SUCCESS');
+            
+            // 重新加载配置
+            config.cognito.username = loginEmail;
+            config.cognito.password = loginPassword;
             
             // 询问是否立即启动机器人
             const startNow = await question('是否立即启动机器人？(y/n): ');
             if (startNow.toLowerCase() === 'y') {
               readline.close();
+              // 使用新的认证信息创建 tokenManager
+              const tokenManager = new TokenManager();
+              await tokenManager.getValidToken(); // 验证新的认证信息
+              log('认证信息验证成功，正在启动机器人...', 'SUCCESS');
               main();
             } else {
               readline.close();
