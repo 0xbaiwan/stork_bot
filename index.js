@@ -228,50 +228,37 @@ class CognitoAuth {
         throw new Error('密码长度必须大于8位');
       }
 
-      // 先获取 CSRF token
-      const csrfResponse = await axios.get('https://api.jp.stork-oracle.network/auth/csrf', {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
+      // 使用 Cognito SDK 注册
+      return new Promise((resolve, reject) => {
+        const attributeList = [
+          new AmazonCognitoIdentity.CognitoUserAttribute({
+            Name: 'email',
+            Value: email
+          })
+        ];
+
+        if (referralCode) {
+          attributeList.push(
+            new AmazonCognitoIdentity.CognitoUserAttribute({
+              Name: 'custom:referral_code',
+              Value: referralCode
+            })
+          );
         }
+
+        userPool.signUp(email, password, attributeList, null, (err, result) => {
+          if (err) {
+            log(`注册失败: ${err.message}`, 'ERROR');
+            reject(err);
+            return;
+          }
+          log('注册成功，请查收验证邮件', 'SUCCESS');
+          resolve(result);
+        });
       });
-
-      const csrfToken = csrfResponse.data.csrf_token;
-
-      // 注册请求
-      const response = await axios({
-        method: 'POST',
-        url: 'https://api.jp.stork-oracle.network/auth/signup',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
-          'X-CSRF-TOKEN': csrfToken,
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
-        },
-        data: {
-          email: email,
-          password: password,
-          referral_code: referralCode || undefined,
-          csrf_token: csrfToken
-        }
-      });
-
-      log('注册成功，请查收验证邮件', 'SUCCESS');
-      return response.data;
     } catch (error) {
-      if (error.response) {
-        const errorMessage = error.response.data?.message || error.response.data?.error || error.message;
-        log(`注册失败: ${errorMessage}`, 'ERROR');
-        throw new Error(errorMessage);
-      } else {
-        log(`注册失败: ${error.message}`, 'ERROR');
-        throw error;
-      }
+      log(`注册失败: ${error.message}`, 'ERROR');
+      throw error;
     }
   }
 
@@ -284,49 +271,28 @@ class CognitoAuth {
   static async verifyEmail(email, code) {
     try {
       log('正在验证邮箱...');
-
-      // 获取 CSRF token
-      const csrfResponse = await axios.get('https://api.jp.stork-oracle.network/auth/csrf', {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
-        }
-      });
-
-      const csrfToken = csrfResponse.data.csrf_token;
       
-      const response = await axios({
-        method: 'POST',
-        url: 'https://api.jp.stork-oracle.network/auth/verify-email',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
-          'X-CSRF-TOKEN': csrfToken,
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
-        },
-        data: {
-          email: email,
-          code: code,
-          csrf_token: csrfToken
-        }
-      });
+      return new Promise((resolve, reject) => {
+        const userData = {
+          Username: email,
+          Pool: userPool
+        };
 
-      log('邮箱验证成功！', 'SUCCESS');
-      return response.data;
+        const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+        cognitoUser.confirmRegistration(code, true, (err, result) => {
+          if (err) {
+            log(`邮箱验证失败: ${err.message}`, 'ERROR');
+            reject(err);
+            return;
+          }
+          log('邮箱验证成功！', 'SUCCESS');
+          resolve(result);
+        });
+      });
     } catch (error) {
-      if (error.response) {
-        const errorMessage = error.response.data?.message || error.response.data?.error || error.message;
-        log(`邮箱验证失败: ${errorMessage}`, 'ERROR');
-        throw new Error(errorMessage);
-      } else {
-        log(`邮箱验证失败: ${error.message}`, 'ERROR');
-        throw error;
-      }
+      log(`邮箱验证失败: ${error.message}`, 'ERROR');
+      throw error;
     }
   }
 }
