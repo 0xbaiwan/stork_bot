@@ -56,10 +56,13 @@ function loadConfig() {
           password: ''   // 用户需填写密码
         },
         stork: {
-          intervalSeconds: 10  // 验证间隔时间(秒)
+          intervalRange: {  // 改为区间配置
+            min: 3,         // 最小间隔秒数
+            max: 10         // 最大间隔秒数
+          }
         },
         threads: {
-          maxWorkers: 10      // 最大工作线程数
+          maxWorkers: 1
         }
       };
       fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8');
@@ -94,12 +97,12 @@ const config = {
     baseURL: 'https://app-api.jp.stork-oracle.network/v1',
     authURL: 'https://api.jp.stork-oracle.network/auth',
     tokenPath: path.join(__dirname, 'tokens.json'),
-    intervalSeconds: userConfig.stork?.intervalSeconds || 10,
+    intervalRange: userConfig.stork?.intervalRange || { min: 3, max: 10 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
     origin: 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl'
   },
   threads: {
-    maxWorkers: userConfig.threads?.maxWorkers || 10,
+    maxWorkers: userConfig.threads?.maxWorkers || 1,
     proxyFile: path.join(__dirname, 'proxies.txt')
   }
 };
@@ -459,6 +462,11 @@ class RateLimit {
 
 const rateLimit = new RateLimit(10, 60000); // 10 requests per minute
 
+// 添加获取随机间隔的函数
+function getRandomInterval(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 // 优化验证统计显示
 function displayStats(userData) {
   if (!userData || !userData.stats) {
@@ -482,7 +490,7 @@ function displayStats(userData) {
   console.log(`⏱️ 最后验证时间: ${userData.stats.stork_signed_prices_last_verified_at || '从未验证'}`);
   console.log(`👥 邀请使用次数: ${userData.stats.referral_usage_count || 0}`);
   console.log('\x1b[36m---------------------------------------------\x1b[0m');
-  console.log(`⏳ ${config.stork.intervalSeconds} 秒后进行下一次验证...`);
+  console.log(`⏳ 验证间隔: ${config.stork.intervalRange.min}-${config.stork.intervalRange.max} 秒随机`);
   console.log('\x1b[36m=============================================\x1b[0m');
 }
 
@@ -685,8 +693,20 @@ if (!isMainThread) {
       await tokenManager.getValidToken();
       log('初始认证成功', 'SUCCESS');
 
-      runValidationProcess(tokenManager);
-      setInterval(() => runValidationProcess(tokenManager), config.stork.intervalSeconds * 1000);
+      // 修改为使用随机间隔
+      const runWithRandomInterval = async () => {
+        await runValidationProcess(tokenManager);
+        const nextInterval = getRandomInterval(
+          config.stork.intervalRange.min, 
+          config.stork.intervalRange.max
+        );
+        log(`下次验证将在 ${nextInterval} 秒后进行`, 'INFO');
+        setTimeout(runWithRandomInterval, nextInterval * 1000);
+      };
+
+      runWithRandomInterval();
+
+      // Token 刷新保持不变
       setInterval(async () => {
         await tokenManager.getValidToken();
         log('Token 已刷新', 'SUCCESS');
@@ -713,7 +733,7 @@ if (!isMainThread) {
             userPoolId: 'ap-northeast-1_M22I44OpC'
           },
           stork: {
-            intervalSeconds: 5
+            intervalRange: { min: 3, max: 10 }
           },
           threads: {
             maxWorkers: 1
