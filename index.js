@@ -228,6 +228,19 @@ class CognitoAuth {
         throw new Error('密码长度必须大于8位');
       }
 
+      // 先获取 CSRF token
+      const csrfResponse = await axios.get('https://api.jp.stork-oracle.network/auth/csrf', {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
+          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
+        }
+      });
+
+      const csrfToken = csrfResponse.data.csrf_token;
+
+      // 注册请求
       const response = await axios({
         method: 'POST',
         url: 'https://api.jp.stork-oracle.network/auth/signup',
@@ -236,15 +249,15 @@ class CognitoAuth {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Sec-Fetch-Site': 'cross-site',
-          'Sec-Fetch-Mode': 'cors',
-          'Sec-Fetch-Dest': 'empty',
+          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
+          'X-CSRF-TOKEN': csrfToken,
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         data: {
           email: email,
           password: password,
-          referral_code: referralCode || undefined
+          referral_code: referralCode || undefined,
+          csrf_token: csrfToken
         }
       });
 
@@ -271,6 +284,18 @@ class CognitoAuth {
   static async verifyEmail(email, code) {
     try {
       log('正在验证邮箱...');
+
+      // 获取 CSRF token
+      const csrfResponse = await axios.get('https://api.jp.stork-oracle.network/auth/csrf', {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
+          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
+        }
+      });
+
+      const csrfToken = csrfResponse.data.csrf_token;
       
       const response = await axios({
         method: 'POST',
@@ -280,14 +305,14 @@ class CognitoAuth {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Origin': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl',
-          'Sec-Fetch-Site': 'cross-site',
-          'Sec-Fetch-Mode': 'cors',
-          'Sec-Fetch-Dest': 'empty',
+          'Referer': 'chrome-extension://knnliglhgkmlblppdejchidfihjnockl/popup.html',
+          'X-CSRF-TOKEN': csrfToken,
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         data: {
           email: email,
-          code: code
+          code: code,
+          csrf_token: csrfToken
         }
       });
 
